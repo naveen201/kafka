@@ -1,0 +1,230 @@
+eksctl create cluster \
+    --name=eks-kafka \
+    --region=ap-south-1 \
+    --zones=ap-south-1a,ap-south-1b \
+    --vpc-cidr=10.11.0.0/16 \
+    --without-nodegroup
+
+
+
+
+eksctl create nodegroup \
+    --cluster=eks-kafka \
+    --region=ap-south-1 \
+    --name=ondemand-ng \
+    --node-type=t3.medium \
+    --nodes=1 \
+    --nodes-min=1 \
+    --nodes-max=1 \
+    --node-volume-size=50 \
+    --node-labels="lifecycle=OnDemand"
+
+eksctl create nodegroup \
+    --cluster=eks-kafka \
+    --region=ap-south-1 \
+    --name=spot-ng \
+    --node-type=t3.medium \
+    --nodes=2 \
+    --nodes-min=1 \
+    --nodes-max=2 \
+    --node-volume-size=50 \
+    --spot \
+    --node-labels="lifecycle=Spot"
+
+
+
+
+============================
+helm upgrade --install confluent-operator confluentinc/confluent-for-kubernetes \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=ebs-sc \
+  --set persistence.size=100Gi \
+  --set global.storageClass=ebs-sc \
+  --namespace confluent
+
+
+
+helm upgrade --install my-confluent . --namespace confluent
+Release "my-confluent" does not exist. Installing it now.
+NAME: my-confluent
+LAST DEPLOYED: Thu Aug  1 08:39:15 2024
+NAMESPACE: confluent
+STATUS: deployed
+REVISION: 1
+NOTES:
+## ------------------------------------------------------
+## Zookeeper
+## ------------------------------------------------------
+Connection string for Confluent Kafka:
+  my-confluent-cp-zookeeper-0.my-confluent-cp-zookeeper-headless:2181,my-confluent-cp-zookeeper-1.my-confluent-cp-zookeeper-headless:2181,...
+
+To connect from a client pod:
+
+1. Deploy a zookeeper client pod with configuration:
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: zookeeper-client
+      namespace: confluent
+    spec:
+      containers:
+      - name: zookeeper-client
+        image: confluentinc/cp-zookeeper:6.1.0
+        command:
+          - sh
+          - -c
+          - "exec tail -f /dev/null"
+
+2. Log into the Pod
+
+  kubectl exec -it zookeeper-client -- /bin/bash
+
+3. Use zookeeper-shell to connect in the zookeeper-client Pod:
+
+  zookeeper-shell my-confluent-cp-zookeeper:2181
+
+4. Explore with zookeeper commands, for example:
+
+  # Gives the list of active brokers
+  ls /brokers/ids
+
+  # Gives the list of topics
+  ls /brokers/topics
+
+  # Gives more detailed information of the broker id '0'
+  get /brokers/ids/0## ------------------------------------------------------
+## Kafka
+## ------------------------------------------------------
+To connect from a client pod:
+
+1. Deploy a kafka client pod with configuration:
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: kafka-client
+      namespace: confluent
+    spec:
+      containers:
+      - name: kafka-client
+        image: confluentinc/cp-enterprise-kafka:6.1.0
+        command:
+          - sh
+          - -c
+          - "exec tail -f /dev/null"
+
+2. Log into the Pod
+
+  kubectl exec -it kafka-client -- /bin/bash
+
+3. Explore with kafka commands:
+
+  # Create the topic
+  kafka-topics --zookeeper my-confluent-cp-zookeeper-headless:2181 --topic my-confluent-topic --create --partitions 1 --replication-factor 1 --if-not-exists
+
+  # Create a message
+  MESSAGE="`date -u`"
+
+  # Produce a test message to the topic
+  echo "$MESSAGE" | kafka-console-producer --broker-list my-confluent-cp-kafka-headless:9092 --topic my-confluent-topic
+
+  # Consume a test message from the topic
+  kafka-console-consumer --bootstrap-server my-confluent-cp-kafka-headless:9092 --topic my-confluent-topic --from-beginning --timeout-ms 2000 --max-messages 1 | grep "$MESSAGE"      
+root@ip:~/naveen/kafka-new/cp-helm-charts#
+
+
+
+======================================================================
+helm upgrade --install confluent-operator confluentinc/confluent-for-kubernetes \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=ebs-sc \
+  --set persistence.size=100Gi \
+  --set global.storageClass=ebs-sc \
+  --namespace confluent
+
+---modify-->size
+
+export MY_KAFKA_TUTORIAL_HOME="https://raw.githubusercontent.com/confluentinc/confluent-kubernetes-examples/master/quickstart-deploy/kraft-quickstart"
+
+
+kubectl delete -f $MY_KAFKA_TUTORIAL_HOME/confluent-platform.yaml
+kubectl apply -f $MY_KAFKA_TUTORIAL_HOME/confluent-platform.yaml
+
+
+
+kubectl apply -f $MY_KAFKA_TUTORIAL_HOME/producer-app-data.yaml
+
+kubectl delete -f $MY_KAFKA_TUTORIAL_HOME/producer-app-data.yaml
+
+->curl -o confluent-platform.yaml https://raw.githubusercontent.com/confluentinc/confluent-kubernetes-examples/master/quickstart-deploy/kraft-quickstart/confluent-platform.yaml
+
+->sed 's/namespace: confluent/namespace: stg-kafka/g' confluent-platform.yaml | kubectl apply -f -
+
+now
+
+kubectl apply -f $MY_KAFKA_TUTORIAL_HOME/producer-app-data.yaml
+
+cat storageclass.yaml 
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-0a56064da1749bhuy
+  directoryPerms: "700"
+  gidRangeStart: "1000" # optional
+  gidRangeEnd: "2000" # optional
+  basePath: "/dynamic_provisioning" # optional
+  subPathPattern: "${.PVC.namespace}/${.PVC.name}" # optional
+  ensureUniqueDirectory: "true" # optional
+  reuseAccessPoint: "false" # optional
+root@ip-172-31-27-118:~/kafka# 
+
+
+-------------pv
+cat stg-efs-pv.yaml 
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: stg-kafka-efs-pv
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: fs-0a56064hki987
+
+-----------pvc
+cat stg-efs-pvc.yaml 
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stg-kafka-efs-pvc
+  namespace: stg-kafka
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 100Gi
+
+=================ebs driver=========
+helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+  --namespace kube-system \
+  --set serviceAccount.controller.create=false \
+  --set serviceAccount.controller.name=ebs-csi-controller-sa \
+  --set controller.serviceAccount.create=false \
+  --set controller.serviceAccount.name=ebs-csi-controller-sa \
+  --set enableVolumeResizing=true \
+  --set enableVolumeSnapshot=true \
+  --set region=ap-south-1 \
+  --set controller.serviceAnnotations."eks\.amazonaws\.com/role-arn"="arn:aws:iam::3211765432:role/<ROLE_NAME>"
