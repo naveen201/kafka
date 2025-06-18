@@ -228,3 +228,81 @@ helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
   --set enableVolumeSnapshot=true \
   --set region=ap-south-1 \
   --set controller.serviceAnnotations."eks\.amazonaws\.com/role-arn"="arn:aws:iam::3211765432:role/<ROLE_NAME>"
+
+
+
+
+
+
+
+
+
+===========================final==============================
+
+
+============================================
+
+eksctl create cluster \
+    --name=eks-kafka \
+    --region=ap-south-1 \
+    --zones=ap-south-1a,ap-south-1b \
+    --vpc-cidr=10.116.0.0/16 \
+    --without-nodegroup
+
+
+
+
+eksctl create nodegroup \
+    --cluster=eks-kafka \
+    --region=ap-south-1 \
+    --name=ondemand-ng \
+    --node-type=t3.medium \
+    --nodes=1 \
+    --nodes-min=1 \
+    --nodes-max=1 \
+    --node-volume-size=50 \
+    --node-labels="lifecycle=OnDemand"
+
+
+eksctl create nodegroup \
+    --cluster=eks-kafka \
+    --region=ap-south-1 \
+    --name=spot-ng \
+    --node-type=t3.medium \
+    --nodes=2 \
+    --nodes-min=1 \
+    --nodes-max=2 \
+    --node-volume-size=50 \
+    --spot \
+    --node-labels="lifecycle=Spot"
+
+
+
+
+
+=======================================================================
+==================Kafka
+helm upgrade my-kafka bitnami/kafka \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=efs-sc \
+  --set persistence.size=100Gi \
+  --set global.storageClass=efs-sc \
+  --namespace kafka
+=======================zookeeper=======
+helm install my-zookeeper bitnami/zookeeper \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=efs-sc \
+  --set persistence.size=100Gi \
+  --set global.storageClass=efs-sc \
+  --namespace kafka
+
+=========================version ok kafka and zookeeper
+Kafka version is 3.7.1.
+Zookeeper version is 3.9.2
+
+====================
+helm list -n kafka
+NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                   APP VERSION
+my-kafka        kafka           1               2024-07-11 07:31:31.330147548 +0000 UTC deployed        kafka-29.3.7            3.7.1
+my-zookeeper    kafka           1               2024-07-11 12:44:52.859295596 +0000 UTC deployed        zookeeper-13.4.7        3.9.2
+
